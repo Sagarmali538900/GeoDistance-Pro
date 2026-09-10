@@ -11,7 +11,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/geometrics';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://sagarmali5389_db_user:tZqgMJqtv1WzIG4F@cluster0.cimmjuo.mongodb.net/geometrics?retryWrites=true&w=majority&appName=Cluster0';
 
 app.use(cors());
 app.use(express.json());
@@ -23,11 +23,11 @@ let memoryStore = {
   tours: []
 };
 
-// Connect to MongoDB
+// Connect to MongoDB Atlas
 mongoose.connect(MONGODB_URI)
   .then(() => {
     isMongoConnected = true;
-    console.log(`✅ MongoDB Connected successfully to: ${MONGODB_URI}`);
+    console.log(`✅ MongoDB Connected successfully to MongoDB Atlas: ${MONGODB_URI}`);
   })
   .catch((err) => {
     isMongoConnected = false;
@@ -146,7 +146,6 @@ app.post('/api/history', async (req, res) => {
   }
 });
 
-// Get ALL Team History Across All Users
 app.get('/api/history/all', async (req, res) => {
   try {
     if (isMongoConnected) {
@@ -160,7 +159,6 @@ app.get('/api/history/all', async (req, res) => {
   }
 });
 
-// Get History for specific User
 app.get('/api/users/:userName/history', async (req, res) => {
   try {
     const { userName } = req.params;

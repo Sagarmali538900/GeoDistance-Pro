@@ -1,12 +1,10 @@
 import { Loader } from '@googlemaps/js-api-loader';
+import { calculateRouteFree } from './freeRoutingService';
 
 let loaderInstance = null;
 let googleMapsPromise = null;
 let activeApiKey = null;
 
-/**
- * Get current Google Maps API Key from env or localStorage
- */
 export function getApiKey() {
   const envKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   if (envKey && envKey.trim() !== '' && envKey !== 'YOUR_GOOGLE_MAPS_API_KEY_HERE') {
@@ -16,24 +14,17 @@ export function getApiKey() {
   return customKey ? customKey.trim() : '';
 }
 
-/**
- * Save dynamic API Key to localStorage
- */
 export function saveCustomApiKey(key) {
   if (key) {
     localStorage.setItem('geometrics_custom_api_key', key.trim());
   } else {
     localStorage.removeItem('geometrics_custom_api_key');
   }
-  // Reset loader cache so it re-initializes with the new key
   loaderInstance = null;
   googleMapsPromise = null;
   activeApiKey = null;
 }
 
-/**
- * Load Google Maps API using Loader from @googlemaps/js-api-loader
- */
 export function loadGoogleMapsApi(overrideKey = null) {
   const apiKey = overrideKey || getApiKey();
 
@@ -62,40 +53,44 @@ export function loadGoogleMapsApi(overrideKey = null) {
   return googleMapsPromise;
 }
 
-/**
- * Reverse Geocode lat, lng to human readable address
- */
 export async function reverseGeocode(lat, lng) {
-  await loadGoogleMapsApi();
-  const geocoder = new window.google.maps.Geocoder();
-  return new Promise((resolve, reject) => {
-    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-      if (status === 'OK' && results && results[0]) {
-        resolve({
-          address: results[0].formatted_address,
-          placeId: results[0].place_id,
-          location: { lat, lng }
-        });
-      } else {
-        reject(new Error(`Geocoding failed: ${status}`));
-      }
+  try {
+    await loadGoogleMapsApi();
+    const geocoder = new window.google.maps.Geocoder();
+    return new Promise((resolve, reject) => {
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results && results[0]) {
+          resolve({
+            address: results[0].formatted_address,
+            placeId: results[0].place_id,
+            location: { lat, lng }
+          });
+        } else {
+          reject(new Error(`Geocoding failed: ${status}`));
+        }
+      });
     });
-  });
+  } catch (e) {
+    return { address: `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`, lat, lng };
+  }
 }
 
 /**
- * Calculate driving / travel route between multiple location points
- * @param {Array<{address: string, placeId?: string, lat?: number, lng?: number}>} locations 
- * @param {string} travelMode 'DRIVING' | 'WALKING' | 'BICYCLING' | 'TRANSIT'
+ * Calculate driving / travel route using 100% Exact Google Maps Directions API
  */
-export async function calculateRoute(locations, travelMode = 'DRIVING') {
+export async function calculateRouteGoogle(locations, travelMode = 'DRIVING') {
+  const apiKey = getApiKey();
+  
+  // If no API key is set, fallback seamlessly to OpenStreetMap engine
+  if (!apiKey) {
+    return calculateRouteFree(locations, travelMode);
+  }
+
   await loadGoogleMapsApi();
   
-  // Filter out empty locations
   const validLocations = locations.filter(loc => loc.address && loc.address.trim() !== '');
-
   if (validLocations.length < 2) {
-    throw new Error('Please select at least two locations (From and To) to calculate distance.');
+    throw new Error('Please enter at least two locations (From and To) to calculate distance.');
   }
 
   const directionsService = new window.google.maps.DirectionsService();
@@ -108,7 +103,6 @@ export async function calculateRoute(locations, travelMode = 'DRIVING') {
     ? { lat: validLocations[validLocations.length - 1].lat, lng: validLocations[validLocations.length - 1].lng }
     : validLocations[validLocations.length - 1].address;
 
-  // Intermediate waypoints
   const waypoints = validLocations.slice(1, -1).map(loc => ({
     location: loc.lat && loc.lng ? { lat: loc.lat, lng: loc.lng } : loc.address,
     stopover: true
@@ -121,14 +115,11 @@ export async function calculateRoute(locations, travelMode = 'DRIVING') {
     'TRANSIT': window.google.maps.TravelMode.TRANSIT
   };
 
-  const selectedMode = modeMap[travelMode] || window.google.maps.TravelMode.DRIVING;
-
   const request = {
     origin,
     destination,
     waypoints,
-    travelMode: selectedMode,
-    optimizeWaypoints: false
+    travelMode: modeMap[travelMode] || window.google.maps.TravelMode.DRIVING
   };
 
   return new Promise((resolve, reject) => {
@@ -151,12 +142,14 @@ export async function calculateRoute(locations, travelMode = 'DRIVING') {
             durationText: leg.duration ? leg.duration.text : 'N/A',
             durationValueSeconds: leg.duration ? leg.duration.value : 0,
             startLocation: { lat: leg.start_location.lat(), lng: leg.start_location.lng() },
-            endLocation: { lat: leg.end_location.lat(), lng: leg.end_location.lng() },
-            stepsCount: leg.steps ? leg.steps.length : 0
+            endLocation: { lat: leg.end_location.lat(), lng: leg.end_location.lng() }
           };
         });
 
+        const routePolylineCoords = route.overview_path.map(p => [p.lat(), p.lng()]);
+
         resolve({
+          isGoogleResult: true,
           directionsResult: result,
           route,
           totalDistanceMeters,
@@ -164,29 +157,16 @@ export async function calculateRoute(locations, travelMode = 'DRIVING') {
           totalDistanceKm: (totalDistanceMeters / 1000).toFixed(1),
           totalDistanceMiles: (totalDistanceMeters / 1609.34).toFixed(1),
           totalDurationFormatted: formatDuration(totalDurationSeconds),
-          legs,
-          validLocationsCount: validLocations.length
+          routePolylineCoords,
+          legs
         });
       } else {
-        let errorMessage = 'Could not calculate route between specified locations.';
-        if (status === 'ZERO_RESULTS') {
-          errorMessage = 'No route could be found between the specified locations.';
-        } else if (status === 'NOT_FOUND') {
-          errorMessage = 'One or more of the specified addresses could not be geocoded.';
-        } else if (status === 'OVER_QUERY_LIMIT') {
-          errorMessage = 'Google Maps API query limit exceeded.';
-        } else if (status === 'REQUEST_DENIED') {
-          errorMessage = 'Google Maps Directions request denied. Check API key permissions.';
-        }
-        reject(new Error(errorMessage));
+        reject(new Error(`Google Maps Directions failed: ${status}`));
       }
     });
   });
 }
 
-/**
- * Format total seconds into clean human readable string (e.g. 28 min, 2 hr 15 min)
- */
 export function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return '0 min';
   const hours = Math.floor(seconds / 3600);

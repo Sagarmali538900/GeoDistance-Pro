@@ -8,15 +8,18 @@ import RecentSearches from './components/RecentSearches';
 import MembersDirectory from './components/MembersDirectory';
 import TourManagement from './components/TourManagement';
 import JainPopulationDirectory from './components/JainPopulationDirectory';
+import ApiKeyModal from './components/ApiKeyModal';
 
 import { calculateRouteFree } from './services/freeRoutingService';
+import { calculateRouteGoogle, getApiKey } from './services/googleMapsLoader';
 import { checkServerStatus, saveCalculationHistoryApi } from './services/apiService';
 import { 
   Calculator, 
   RotateCcw, 
   Loader2, 
   AlertCircle, 
-  Navigation
+  Navigation,
+  Sparkles
 } from 'lucide-react';
 
 const INITIAL_LOCATIONS = [
@@ -26,6 +29,7 @@ const INITIAL_LOCATIONS = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('calculator'); // 'calculator' | 'jain' | 'members' | 'tours'
+  const [mapEngine, setMapEngine] = useState('osm'); // 'osm' | 'google'
   const [currentUser, setCurrentUser] = useState('Sagar Mali');
   const [dbStatus, setDbStatus] = useState({ status: 'online', mongoConnected: true });
 
@@ -39,6 +43,7 @@ export default function App() {
   
   const [history, setHistory] = useState([]);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
 
   // Check server & MongoDB status on mount
   useEffect(() => {
@@ -155,7 +160,17 @@ export default function App() {
     setErrorMessage(null);
 
     try {
-      const result = await calculateRouteFree(validLocations, travelMode);
+      let result;
+      if (mapEngine === 'google') {
+        const apiKey = getApiKey();
+        if (!apiKey) {
+          setIsApiKeyModalOpen(true);
+        }
+        result = await calculateRouteGoogle(validLocations, travelMode);
+      } else {
+        result = await calculateRouteFree(validLocations, travelMode);
+      }
+
       setDirectionsResult(result);
 
       if (result.resolvedLocations) {
@@ -167,7 +182,7 @@ export default function App() {
         })));
       }
 
-      // Save calculation to MongoDB database under current user name!
+      // Save calculation to MongoDB database under current user name
       await saveCalculationHistoryApi({
         userName: currentUser || 'Default User',
         locations: result.resolvedLocations || validLocations,
@@ -197,12 +212,15 @@ export default function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        mapEngine={mapEngine}
+        setMapEngine={setMapEngine}
         unit={unit}
         setUnit={setUnit}
         travelMode={travelMode}
         setTravelMode={setTravelMode}
         onToggleHistory={() => setShowHistoryPanel(!showHistoryPanel)}
         historyCount={history.length}
+        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
       />
 
       {/* User Selection & Database Status Bar */}
@@ -231,8 +249,10 @@ export default function App() {
                       Route & Distance Planner
                     </h2>
                   </div>
-                  <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                    {locations.length} Stops
+
+                  <div className="flex items-center space-x-1.5 text-xs font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200/60">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                    <span className="capitalize">{mapEngine === 'google' ? 'Google Maps' : 'OSM Free'}</span>
                   </div>
                 </div>
 
@@ -317,6 +337,8 @@ export default function App() {
               <MapView
                 directionsResult={directionsResult}
                 locations={locations}
+                apiKeyConfigured={Boolean(getApiKey())}
+                onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
               />
             </div>
 
@@ -352,13 +374,20 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 space-y-2 sm:space-y-0">
           <div className="flex items-center space-x-2">
             <span className="font-bold text-slate-700">GeoMetrics</span>
-            <span>– Full-Stack Distance, Tour & Jain Demographics Analysis</span>
+            <span>– Full-Stack Distance, Tour & Demographics Analysis</span>
           </div>
           <div>
             Tracking active user: <strong className="text-slate-800 font-bold">{currentUser}</strong>
           </div>
         </div>
       </footer>
+
+      {/* Dynamic API Key Modal */}
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onKeyUpdated={() => {}}
+      />
 
     </div>
   );

@@ -10,18 +10,23 @@ import {
   Users,
   Briefcase,
   Calculator,
-  Heart
+  Compass,
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 
 export default function Header({ 
   activeTab,
   setActiveTab,
+  mapEngine,
+  setMapEngine,
   unit, 
   setUnit, 
   travelMode, 
   setTravelMode, 
   onToggleHistory,
-  historyCount
+  historyCount,
+  onOpenApiKeyModal
 }) {
   const travelModes = [
     { id: 'DRIVING', label: 'Driving', icon: Car },
@@ -47,17 +52,17 @@ export default function Header({
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-none">
                   GeoMetrics
                 </h1>
-                <span className="hidden sm:inline-block px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200">
+                <span className="hidden sm:inline-block px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase bg-brand-50 text-brand-700 rounded-full border border-brand-200">
                   PRO
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Location, Distance & Demographics Analysis
+                Precision Location & Distance Analysis
               </p>
             </div>
           </div>
 
-          {/* Center Navigation Tabs (Desktop) */}
+          {/* Navigation Tabs (Desktop) */}
           <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setActiveTab('calculator')}
@@ -80,7 +85,7 @@ export default function Header({
               }`}
             >
               <Users className="w-4 h-4 text-amber-600" />
-              <span>Jain Population</span>
+              <span>Jain Info</span>
             </button>
 
             <button
@@ -108,9 +113,38 @@ export default function Header({
             </button>
           </div>
 
-          {/* Right Actions */}
+          {/* Right Actions & Engine Switcher */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             
+            {/* Engine Switcher (Google Maps 100% Accurate vs Free OSM) */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+              <button
+                onClick={() => setMapEngine('google')}
+                className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg font-extrabold transition-all ${
+                  mapEngine === 'google'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Use Google Maps Engine (100% Exact Precision & Live Google Data)"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Google Maps</span>
+              </button>
+
+              <button
+                onClick={() => setMapEngine('osm')}
+                className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg font-bold transition-all ${
+                  mapEngine === 'osm'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Use OpenStreetMap Free Engine"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>OSM Free</span>
+              </button>
+            </div>
+
             {/* Unit Toggle (km / miles) */}
             <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
               <button
@@ -149,15 +183,6 @@ export default function Header({
               )}
             </button>
 
-            {/* MongoDB Badge */}
-            <div 
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
-              title="Connected to MongoDB database"
-            >
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span className="hidden sm:inline">MongoDB Connected</span>
-            </div>
-
           </div>
 
         </div>
@@ -181,7 +206,7 @@ export default function Header({
             }`}
           >
             <Users className="w-3.5 h-3.5 text-amber-600" />
-            <span>Jain Info</span>
+            <span>Jain</span>
           </button>
 
           <button
