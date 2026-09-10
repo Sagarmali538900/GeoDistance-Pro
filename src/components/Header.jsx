@@ -9,7 +9,8 @@ import {
   ShieldCheck,
   Users,
   Briefcase,
-  Calculator
+  Calculator,
+  Heart
 } from 'lucide-react';
 
 export default function Header({ 
@@ -51,7 +52,7 @@ export default function Header({
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Enterprise Distance & Tour Management
+                Location, Distance & Demographics Analysis
               </p>
             </div>
           </div>
@@ -60,38 +61,50 @@ export default function Header({
           <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setActiveTab('calculator')}
-              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'calculator' 
                   ? 'bg-white text-brand-700 shadow-xs border border-slate-200' 
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Calculator className="w-4 h-4" />
-              <span>Distance Calculator</span>
+              <span>Calculator</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('jain')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'jain' 
+                  ? 'bg-amber-50 text-amber-900 shadow-xs border border-amber-200' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-4 h-4 text-amber-600" />
+              <span>Jain Population</span>
             </button>
 
             <button
               onClick={() => setActiveTab('members')}
-              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'members' 
                   ? 'bg-white text-brand-700 shadow-xs border border-slate-200' 
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Users className="w-4 h-4" />
-              <span>Team Members & History</span>
+              <span>Members</span>
             </button>
 
             <button
               onClick={() => setActiveTab('tours')}
-              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'tours' 
                   ? 'bg-white text-brand-700 shadow-xs border border-slate-200' 
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Briefcase className="w-4 h-4" />
-              <span>Tour Management</span>
+              <span>Tours</span>
             </button>
           </div>
 
@@ -153,17 +166,27 @@ export default function Header({
         <div className="lg:hidden flex items-center justify-around py-2 border-t border-slate-100 text-xs">
           <button
             onClick={() => setActiveTab('calculator')}
-            className={`flex items-center space-x-1 px-3 py-1 rounded-lg ${
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg ${
               activeTab === 'calculator' ? 'bg-brand-50 text-brand-700 font-bold border border-brand-200' : 'text-slate-600'
             }`}
           >
             <Calculator className="w-3.5 h-3.5" />
-            <span>Calculator</span>
+            <span>Calc</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('jain')}
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg ${
+              activeTab === 'jain' ? 'bg-amber-50 text-amber-900 font-bold border border-amber-200' : 'text-slate-600'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-amber-600" />
+            <span>Jain Info</span>
           </button>
 
           <button
             onClick={() => setActiveTab('members')}
-            className={`flex items-center space-x-1 px-3 py-1 rounded-lg ${
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg ${
               activeTab === 'members' ? 'bg-brand-50 text-brand-700 font-bold border border-brand-200' : 'text-slate-600'
             }`}
           >
@@ -173,7 +196,7 @@ export default function Header({
 
           <button
             onClick={() => setActiveTab('tours')}
-            className={`flex items-center space-x-1 px-3 py-1 rounded-lg ${
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg ${
               activeTab === 'tours' ? 'bg-brand-50 text-brand-700 font-bold border border-brand-200' : 'text-slate-600'
             }`}
           >

@@ -7,6 +7,7 @@ import MapView from './components/MapView';
 import RecentSearches from './components/RecentSearches';
 import MembersDirectory from './components/MembersDirectory';
 import TourManagement from './components/TourManagement';
+import JainPopulationDirectory from './components/JainPopulationDirectory';
 
 import { calculateRouteFree } from './services/freeRoutingService';
 import { checkServerStatus, saveCalculationHistoryApi } from './services/apiService';
@@ -24,7 +25,7 @@ const INITIAL_LOCATIONS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('calculator'); // 'calculator' | 'members' | 'tours'
+  const [activeTab, setActiveTab] = useState('calculator'); // 'calculator' | 'jain' | 'members' | 'tours'
   const [currentUser, setCurrentUser] = useState('Sagar Mali');
   const [dbStatus, setDbStatus] = useState({ status: 'online', mongoConnected: true });
 
@@ -122,6 +123,18 @@ export default function App() {
       setActiveTab('calculator');
       handleCalculateRouteWithLocations(formatted);
     }
+  };
+
+  // Calculate route to a Jain Tirth / City from current starting location
+  const handleCalculateRouteToTirth = (destinationCityName) => {
+    const origin = locations[0]?.address || 'Mumbai';
+    const updated = [
+      { id: 'tirth-start', address: origin, lat: null, lng: null },
+      { id: 'tirth-dest', address: destinationCityName, lat: null, lng: null }
+    ];
+    setLocations(updated);
+    setActiveTab('calculator');
+    handleCalculateRouteWithLocations(updated);
   };
 
   // Perform route calculation
@@ -310,14 +323,21 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: Team Members & User History */}
+        {/* TAB 2: Jain Population & Tirth Directory */}
+        {activeTab === 'jain' && (
+          <JainPopulationDirectory
+            onCalculateRouteToTirth={handleCalculateRouteToTirth}
+          />
+        )}
+
+        {/* TAB 3: Team Members & User History */}
         {activeTab === 'members' && (
           <MembersDirectory
             onSelectRouteForMap={handleLoadRouteToMap}
           />
         )}
 
-        {/* TAB 3: Tour Management System */}
+        {/* TAB 4: Tour Management System */}
         {activeTab === 'tours' && (
           <TourManagement
             currentUser={currentUser}
@@ -332,7 +352,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 space-y-2 sm:space-y-0">
           <div className="flex items-center space-x-2">
             <span className="font-bold text-slate-700">GeoMetrics</span>
-            <span>– Full-Stack Distance & Tour Management (MongoDB + Leaflet + Express)</span>
+            <span>– Full-Stack Distance, Tour & Jain Demographics Analysis</span>
           </div>
           <div>
             Tracking active user: <strong className="text-slate-800 font-bold">{currentUser}</strong>
