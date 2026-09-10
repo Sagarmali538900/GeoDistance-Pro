@@ -16,10 +16,9 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/geomet
 app.use(cors());
 app.use(express.json());
 
-// In-Memory Fallback Storage if MongoDB is disconnected
 let isMongoConnected = false;
 const memoryStore = {
-  users: [{ _id: 'u-1', name: 'Default User', role: 'Field Agent', lastActive: new Date() }],
+  users: [{ _id: 'u-1', name: 'Sagar Mali', role: 'Field Agent', lastActive: new Date() }],
   history: [],
   tours: []
 };
@@ -32,7 +31,7 @@ mongoose.connect(MONGODB_URI)
   })
   .catch((err) => {
     isMongoConnected = false;
-    console.warn(`⚠️ Could not connect to MongoDB (${err.message}). Using in-memory fallback store.`);
+    console.warn(`⚠️ MongoDB connection error (${err.message}). Using in-memory fallback.`);
   });
 
 // Status check API
@@ -46,14 +45,25 @@ app.get('/api/status', (req, res) => {
 
 // --- USER ROUTES ---
 
-// Get all users/team members
+// Get all users with total history count
 app.get('/api/users', async (req, res) => {
   try {
     if (isMongoConnected) {
-      const users = await User.find().sort({ lastActive: -1 });
-      res.json(users);
+      const users = await User.find().sort({ lastActive: -1 }).lean();
+      // Attach history counts
+      const usersWithCounts = await Promise.all(
+        users.map(async (u) => {
+          const regex = new RegExp(`^${u.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+          const count = await CalculationHistory.countDocuments({ userName: regex });
+          return { ...u, calculationsCount: count };
+        })
+      );
+      res.json(usersWithCounts);
     } else {
-      res.json(memoryStore.users);
+      res.json(memoryStore.users.map(u => ({
+        ...u,
+        calculationsCount: memoryStore.history.filter(h => h.userName.toLowerCase() === u.name.toLowerCase()).length
+      })));
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -71,7 +81,8 @@ app.post('/api/users', async (req, res) => {
     const trimmedName = name.trim();
 
     if (isMongoConnected) {
-      let user = await User.findOne({ name: trimmedName });
+      const regex = new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      let user = await User.findOne({ name: regex });
       if (!user) {
         user = await User.create({ name: trimmedName, role: role || 'Field Agent' });
       } else {
@@ -105,16 +116,20 @@ app.post('/api/history', async (req, res) => {
       return res.status(400).json({ error: 'Invalid calculation payload' });
     }
 
+    const trimmedName = userName.trim();
+
     if (isMongoConnected) {
+      const regex = new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      
       // Ensure user exists and update lastActive
       await User.findOneAndUpdate(
-        { name: userName },
-        { lastActive: new Date() },
+        { name: regex },
+        { name: trimmedName, lastActive: new Date() },
         { upsert: true, new: true }
       );
 
       const historyItem = await CalculationHistory.create({
-        userName,
+        userName: trimmedName,
         locations,
         result,
         travelMode: travelMode || 'DRIVING'
@@ -123,7 +138,7 @@ app.post('/api/history', async (req, res) => {
     } else {
       const historyItem = {
         _id: `h-${Date.now()}`,
-        userName,
+        userName: trimmedName,
         locations,
         result,
         travelMode: travelMode || 'DRIVING',
@@ -137,15 +152,22 @@ app.post('/api/history', async (req, res) => {
   }
 });
 
-// Get History for specific User or All
+// Get History for specific User (Case-insensitive & Flexible matching)
 app.get('/api/users/:userName/history', async (req, res) => {
   try {
     const { userName } = req.params;
+    const cleanName = decodeURIComponent(userName).trim();
+
     if (isMongoConnected) {
-      const history = await CalculationHistory.find({ userName }).sort({ createdAt: -1 }).limit(30);
+      // Flexible regex match for full name or first name
+      const regex = new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+      const history = await CalculationHistory.find({ userName: regex }).sort({ createdAt: -1 }).limit(50);
       res.json(history);
     } else {
-      const filtered = memoryStore.history.filter(h => h.userName.toLowerCase() === userName.toLowerCase());
+      const filtered = memoryStore.history.filter(h => 
+        h.userName.toLowerCase().startsWith(cleanName.toLowerCase()) ||
+        cleanName.toLowerCase().startsWith(h.userName.toLowerCase())
+      );
       res.json(filtered);
     }
   } catch (err) {
@@ -155,12 +177,13 @@ app.get('/api/users/:userName/history', async (req, res) => {
 
 // --- TOUR MANAGEMENT ROUTES ---
 
-// Get all Tours
 app.get('/api/tours', async (req, res) => {
   try {
     const { assignedUser, status } = req.query;
     const filter = {};
-    if (assignedUser) filter.assignedUser = assignedUser;
+    if (assignedUser) {
+      filter.assignedUser = new RegExp(`^${assignedUser.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+    }
     if (status) filter.status = status;
 
     if (isMongoConnected) {
@@ -168,7 +191,7 @@ app.get('/api/tours', async (req, res) => {
       res.json(tours);
     } else {
       let tours = [...memoryStore.tours];
-      if (assignedUser) tours = tours.filter(t => t.assignedUser === assignedUser);
+      if (assignedUser) tours = tours.filter(t => t.assignedUser.toLowerCase().includes(assignedUser.toLowerCase()));
       if (status) tours = tours.filter(t => t.status === status);
       res.json(tours);
     }
@@ -177,20 +200,19 @@ app.get('/api/tours', async (req, res) => {
   }
 });
 
-// Create a new Tour
 app.post('/api/tours', async (req, res) => {
   try {
     const { title, description, assignedUser, locations, result, status, travelMode, startDate } = req.body;
 
     if (!title || !assignedUser || !locations || locations.length < 2) {
-      return res.status(400).json({ error: 'Title, assigned user, and at least 2 locations are required.' });
+      return res.status(400).json({ error: 'Title, assigned user, and locations are required.' });
     }
 
     if (isMongoConnected) {
       const newTour = await Tour.create({
         title,
         description,
-        assignedUser,
+        assignedUser: assignedUser.trim(),
         locations,
         result,
         status: status || 'PLANNED',
@@ -203,7 +225,7 @@ app.post('/api/tours', async (req, res) => {
         _id: `tour-${Date.now()}`,
         title,
         description,
-        assignedUser,
+        assignedUser: assignedUser.trim(),
         locations,
         result,
         status: status || 'PLANNED',
@@ -219,7 +241,6 @@ app.post('/api/tours', async (req, res) => {
   }
 });
 
-// Update Tour status
 app.patch('/api/tours/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -242,7 +263,6 @@ app.patch('/api/tours/:id', async (req, res) => {
   }
 });
 
-// Delete Tour
 app.delete('/api/tours/:id', async (req, res) => {
   try {
     const { id } = req.params;

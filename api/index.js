@@ -11,10 +11,8 @@ app.use(cors());
 app.use(express.json());
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/geometrics';
-
 let isConnected = false;
 
-// Connect to MongoDB Atlas or local MongoDB
 async function connectDb() {
   if (isConnected && mongoose.connection.readyState === 1) return;
   try {
@@ -25,13 +23,11 @@ async function connectDb() {
   }
 }
 
-// Ensure DB connection before handling API request
 app.use(async (req, res, next) => {
   await connectDb();
   next();
 });
 
-// Status Endpoint
 app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
@@ -40,11 +36,17 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// Users REST Routes
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await User.find().sort({ lastActive: -1 });
-    res.json(users);
+    const users = await User.find().sort({ lastActive: -1 }).lean();
+    const usersWithCounts = await Promise.all(
+      users.map(async (u) => {
+        const regex = new RegExp(`^${u.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+        const count = await CalculationHistory.countDocuments({ userName: regex });
+        return { ...u, calculationsCount: count };
+      })
+    );
+    res.json(usersWithCounts);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -55,9 +57,11 @@ app.post('/api/users', async (req, res) => {
     const { name, role } = req.body;
     if (!name || name.trim() === '') return res.status(400).json({ error: 'Name is required' });
     
-    let user = await User.findOne({ name: name.trim() });
+    const trimmed = name.trim();
+    const regex = new RegExp(`^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    let user = await User.findOne({ name: regex });
     if (!user) {
-      user = await User.create({ name: name.trim(), role: role || 'Field Agent' });
+      user = await User.create({ name: trimmed, role: role || 'Field Agent' });
     } else {
       user.lastActive = new Date();
       await user.save();
@@ -68,7 +72,6 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// History Routes
 app.post('/api/history', async (req, res) => {
   try {
     const { userName, locations, result, travelMode } = req.body;
@@ -76,10 +79,12 @@ app.post('/api/history', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payload' });
     }
 
-    await User.findOneAndUpdate({ name: userName }, { lastActive: new Date() }, { upsert: true });
+    const trimmed = userName.trim();
+    const regex = new RegExp(`^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    await User.findOneAndUpdate({ name: regex }, { name: trimmed, lastActive: new Date() }, { upsert: true });
 
     const item = await CalculationHistory.create({
-      userName,
+      userName: trimmed,
       locations,
       result,
       travelMode: travelMode || 'DRIVING'
@@ -93,19 +98,22 @@ app.post('/api/history', async (req, res) => {
 app.get('/api/users/:userName/history', async (req, res) => {
   try {
     const { userName } = req.params;
-    const history = await CalculationHistory.find({ userName }).sort({ createdAt: -1 }).limit(30);
+    const cleanName = decodeURIComponent(userName).trim();
+    const regex = new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+    const history = await CalculationHistory.find({ userName: regex }).sort({ createdAt: -1 }).limit(50);
     res.json(history);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Tour Routes
 app.get('/api/tours', async (req, res) => {
   try {
     const { assignedUser, status } = req.query;
     const filter = {};
-    if (assignedUser) filter.assignedUser = assignedUser;
+    if (assignedUser) {
+      filter.assignedUser = new RegExp(`^${assignedUser.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+    }
     if (status) filter.status = status;
 
     const tours = await Tour.find(filter).sort({ createdAt: -1 });
@@ -121,7 +129,7 @@ app.post('/api/tours', async (req, res) => {
     const newTour = await Tour.create({
       title,
       description,
-      assignedUser,
+      assignedUser: assignedUser.trim(),
       locations,
       result,
       status: status || 'PLANNED',

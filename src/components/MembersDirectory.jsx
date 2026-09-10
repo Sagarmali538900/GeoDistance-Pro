@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, User, Clock, Route, Calendar, ArrowRight, Search, X, CheckCircle2 } from 'lucide-react';
+import { Users, User, Clock, Route, Calendar, ArrowRight, Search, X, CheckCircle2, RefreshCw } from 'lucide-react';
 import { getUsersApi, getUserHistoryApi, getToursApi } from '../services/apiService';
 
 export default function MembersDirectory({ onSelectRouteForMap }) {
@@ -10,16 +10,17 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const loadMembers = async () => {
+    const list = await getUsersApi();
+    setUsers(list || []);
+  };
+
   // Load all users on mount
   useEffect(() => {
-    async function loadMembers() {
-      const list = await getUsersApi();
-      setUsers(list || []);
-    }
     loadMembers();
   }, []);
 
-  // When a user is clicked, load their distance history & tours from MongoDB
+  // When a user card is clicked, load their distance history & tours from MongoDB
   const handleUserClick = async (user) => {
     setSelectedUser(user);
     setLoadingHistory(true);
@@ -61,16 +62,26 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
           </p>
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search member name..."
-            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500"
-          />
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <button
+            onClick={loadMembers}
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1"
+            title="Refresh Member List"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
+          <div className="relative flex-1 sm:w-64">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search member name..."
+              className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -78,6 +89,8 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredUsers.map((user) => {
           const isSelected = selectedUser?.name === user.name;
+          const calcCount = user.calculationsCount || 0;
+
           return (
             <div
               key={user._id || user.name}
@@ -93,10 +106,15 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-bold text-slate-900 truncate">
-                    {user.name}
-                  </h3>
-                  <span className="inline-block text-[11px] font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md mt-0.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 truncate">
+                      {user.name}
+                    </h3>
+                    <span className="text-[10px] font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200/60">
+                      {calcCount} Logged
+                    </span>
+                  </div>
+                  <span className="inline-block text-[11px] font-semibold text-slate-500 mt-0.5">
                     {user.role || 'Field Agent'}
                   </span>
                 </div>
@@ -118,7 +136,7 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
         })}
       </div>
 
-      {/* Selected Member History Modal / Detail Drawer */}
+      {/* Selected Member History Drawer / Modal */}
       {selectedUser && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-card space-y-5 animate-in fade-in">
           
@@ -130,10 +148,10 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  {selectedUser.name}'s Activity History
+                  {selectedUser.name}'s Distance & Trip History
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Saved distance calculations and tours from MongoDB
+                  Calculations matching user query "{selectedUser.name}"
                 </p>
               </div>
             </div>
@@ -155,15 +173,20 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
               
               {/* Distance Calculations History */}
               <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-                  <Route className="w-4 h-4 text-brand-600" />
-                  <span>Calculated Routes ({userHistory.length})</span>
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <div className="flex items-center space-x-2">
+                    <Route className="w-4 h-4 text-brand-600" />
+                    <span>Calculated Routes ({userHistory.length})</span>
+                  </div>
                 </div>
 
                 {userHistory.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-4 bg-slate-50 rounded-xl text-center">
-                    No distance calculations recorded yet for this user.
-                  </p>
+                  <div className="p-5 bg-slate-50 rounded-xl text-center space-y-1">
+                    <p className="text-xs font-semibold text-slate-600">No distance calculations recorded yet</p>
+                    <p className="text-[11px] text-slate-400">
+                      Calculations made when tracking as "{selectedUser.name}" will automatically appear here.
+                    </p>
+                  </div>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     {userHistory.map((item, idx) => {
@@ -179,7 +202,7 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
                         >
                           <div className="flex items-center justify-between text-slate-500 text-[11px]">
                             <span>{new Date(item.createdAt).toLocaleString()}</span>
-                            <span className="font-bold text-brand-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            <span className="font-bold text-brand-700 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                               {distKm} • {dur}
                             </span>
                           </div>
@@ -213,9 +236,9 @@ export default function MembersDirectory({ onSelectRouteForMap }) {
                 </div>
 
                 {userTours.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-4 bg-slate-50 rounded-xl text-center">
-                    No assigned tours found for this member.
-                  </p>
+                  <div className="p-5 bg-slate-50 rounded-xl text-center">
+                    <p className="text-xs font-semibold text-slate-600">No assigned tours found</p>
+                  </div>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     {userTours.map((tour, idx) => (
