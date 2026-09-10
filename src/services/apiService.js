@@ -29,7 +29,7 @@ export async function getUsersApi() {
   }
   // Fallback
   const savedUsers = localStorage.getItem('geometrics_users');
-  return savedUsers ? JSON.parse(savedUsers) : [{ _id: 'u-1', name: 'Default User', role: 'Field Agent' }];
+  return savedUsers ? JSON.parse(savedUsers) : [{ _id: 'u-1', name: 'Sagar Mali', role: 'Field Agent' }];
 }
 
 /**
@@ -140,6 +140,32 @@ export async function createTourApi(tourData) {
 }
 
 /**
+ * Full Edit Tour
+ */
+export async function updateTourApi(tourId, tourData) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/tours/${tourId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tourData)
+    });
+    if (res.ok) return await res.json();
+  } catch (e) {
+    console.warn("API updateTour failed, fallback to local:", e);
+  }
+
+  // Fallback
+  const savedTours = localStorage.getItem('geometrics_tours');
+  let tours = savedTours ? JSON.parse(savedTours) : [];
+  const idx = tours.findIndex(t => String(t._id) === String(tourId));
+  if (idx !== -1) {
+    tours[idx] = { ...tours[idx], ...tourData };
+    localStorage.setItem('geometrics_tours', JSON.stringify(tours));
+    return tours[idx];
+  }
+}
+
+/**
  * Update Tour status
  */
 export async function updateTourStatusApi(tourId, status) {
@@ -165,6 +191,15 @@ export async function deleteTourApi(tourId) {
     });
     if (res.ok) return await res.json();
   } catch (e) {
-    console.warn("API deleteTour failed:", e);
+    console.warn("API deleteTour failed, fallback to local:", e);
   }
+
+  // Fallback
+  const savedTours = localStorage.getItem('geometrics_tours');
+  if (savedTours) {
+    let tours = JSON.parse(savedTours);
+    tours = tours.filter(t => String(t._id) !== String(tourId));
+    localStorage.setItem('geometrics_tours', JSON.stringify(tours));
+  }
+  return { message: 'Deleted' };
 }

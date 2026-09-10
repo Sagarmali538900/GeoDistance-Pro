@@ -6,14 +6,16 @@ import {
   Trash2, 
   CheckCircle2, 
   Clock, 
-  Play, 
   Map, 
   X, 
   Loader2,
-  Calendar
+  Edit3,
+  ChevronDown,
+  ChevronUp,
+  Route
 } from 'lucide-react';
 import LocationList from './LocationList';
-import { getToursApi, createTourApi, updateTourStatusApi, deleteTourApi, getUsersApi } from '../services/apiService';
+import { getToursApi, createTourApi, updateTourApi, updateTourStatusApi, deleteTourApi, getUsersApi } from '../services/apiService';
 import { calculateRouteFree } from '../services/freeRoutingService';
 
 export default function TourManagement({ currentUser, onLoadTourToMap }) {
@@ -21,7 +23,10 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  // Modal State for Create & Edit
+  const [showModal, setShowModal] = useState(false);
+  const [editingTourId, setEditingTourId] = useState(null); // null if creating, tour ID if editing
+
   const [tourTitle, setTourTitle] = useState('');
   const [tourDesc, setTourDesc] = useState('');
   const [assignedUser, setAssignedUser] = useState(currentUser || '');
@@ -34,6 +39,7 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
 
   const [isCalculating, setIsCalculating] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [expandedTourLegs, setExpandedTourLegs] = useState({});
 
   // Load tours & users on mount
   useEffect(() => {
@@ -58,8 +64,49 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
     setTours(tList || []);
   };
 
-  // Create new Tour with distance calculation
-  const handleCreateTour = async (e) => {
+  // Open modal for Creating a new tour
+  const handleOpenCreateModal = () => {
+    setEditingTourId(null);
+    setTourTitle('');
+    setTourDesc('');
+    setAssignedUser(currentUser || (users[0]?.name || ''));
+    setTourStatus('PLANNED');
+    setTourLocations([
+      { id: 'tloc-1', address: '', lat: null, lng: null },
+      { id: 'tloc-2', address: '', lat: null, lng: null }
+    ]);
+    setErrorMsg(null);
+    setShowModal(true);
+  };
+
+  // Open modal for Editing an existing tour
+  const handleOpenEditModal = (tour) => {
+    setEditingTourId(tour._id);
+    setTourTitle(tour.title || '');
+    setTourDesc(tour.description || '');
+    setAssignedUser(tour.assignedUser || currentUser || '');
+    setTourStatus(tour.status || 'PLANNED');
+
+    if (tour.locations && tour.locations.length >= 2) {
+      setTourLocations(tour.locations.map((loc, idx) => ({
+        id: loc.id || `edit-loc-${idx}-${Date.now()}`,
+        address: loc.address || '',
+        lat: loc.lat || null,
+        lng: loc.lng || null
+      })));
+    } else {
+      setTourLocations([
+        { id: 'tloc-1', address: '', lat: null, lng: null },
+        { id: 'tloc-2', address: '', lat: null, lng: null }
+      ]);
+    }
+
+    setErrorMsg(null);
+    setShowModal(true);
+  };
+
+  // Create or Update Tour Submission
+  const handleSaveTour = async (e) => {
     e.preventDefault();
     if (!tourTitle.trim()) {
       setErrorMsg('Please enter a tour title.');
@@ -76,7 +123,7 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
     setErrorMsg(null);
 
     try {
-      // Calculate tour distance & duration
+      // Calculate tour distance, duration & leg breakdown
       const calcResult = await calculateRouteFree(validLocs, 'DRIVING');
 
       const tourPayload = {
@@ -88,22 +135,24 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
           totalDistanceKm: calcResult.totalDistanceKm,
           totalDistanceMiles: calcResult.totalDistanceMiles,
           totalDurationFormatted: calcResult.totalDurationFormatted,
-          totalDistanceMeters: calcResult.totalDistanceMeters
+          totalDistanceMeters: calcResult.totalDistanceMeters,
+          legs: calcResult.legs || []
         },
         status: tourStatus,
-        startDate: new Date()
+        travelMode: 'DRIVING'
       };
 
-      await createTourApi(tourPayload);
-      await reloadTours();
+      if (editingTourId) {
+        await updateTourApi(editingTourId, tourPayload);
+      } else {
+        await createTourApi({ ...tourPayload, startDate: new Date() });
+      }
 
-      // Reset Form
-      setTourTitle('');
-      setTourDesc('');
-      setShowCreateModal(false);
+      await reloadTours();
+      setShowModal(false);
     } catch (err) {
-      console.error("Create tour error:", err);
-      setErrorMsg(err.message || 'Failed to create tour.');
+      console.error("Save tour error:", err);
+      setErrorMsg(err.message || 'Failed to save tour.');
     } finally {
       setIsCalculating(false);
     }
@@ -115,12 +164,23 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
     await reloadTours();
   };
 
-  // Delete tour
+  // Delete tour with instant UI update
   const handleDeleteTour = async (tourId) => {
     if (window.confirm("Are you sure you want to delete this tour?")) {
-      await deleteTourApi(tourId);
+      // Optimistic UI update
+      setTours(prev => prev.filter(t => String(t._id) !== String(tourId)));
+      try {
+        await deleteTourApi(tourId);
+      } catch (err) {
+        console.warn("Delete API error, reloading tours:", err);
+      }
       await reloadTours();
     }
+  };
+
+  // Toggle leg breakdown visibility for a tour card
+  const toggleLegBreakdown = (tourId) => {
+    setExpandedTourLegs(prev => ({ ...prev, [tourId]: !prev[tourId] }));
   };
 
   return (
@@ -138,12 +198,12 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Create multi-destination field tours, assign team members, track tour status, and visualize complete tour itineraries on the interactive map.
+            Create multi-destination field tours, view segment-by-segment waypoint distances, assign members, edit tour itineraries, and view on the map.
           </p>
         </div>
 
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={handleOpenCreateModal}
           className="flex items-center space-x-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl shadow-md transition-all whitespace-nowrap"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -172,10 +232,13 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
               'CANCELLED': 'bg-rose-50 text-rose-700 border-rose-200'
             };
 
+            const isLegsExpanded = expandedTourLegs[tour._id];
+            const legs = tour.result?.legs || [];
+
             return (
               <div key={tour._id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-card flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
                 
-                {/* Header */}
+                {/* Header & Status */}
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-bold text-slate-900 text-sm leading-snug">
@@ -193,30 +256,70 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
                   )}
                 </div>
 
-                {/* Info Badges */}
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2 text-xs">
+                {/* Info & Waypoint Distance Summary */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-2 text-xs">
                   <div className="flex items-center justify-between text-slate-700">
                     <span className="text-slate-500">Assigned Member:</span>
                     <span className="font-bold text-slate-900">👤 {tour.assignedUser}</span>
                   </div>
 
                   <div className="flex items-center justify-between text-slate-700 pt-1 border-t border-slate-200/60">
-                    <span className="text-slate-500">Total Route:</span>
+                    <span className="text-slate-500">Total Route Distance:</span>
                     <span className="font-bold text-brand-700">
                       {tour.result?.totalDistanceKm ? `${tour.result.totalDistanceKm} km` : 'N/A'} ({tour.result?.totalDurationFormatted || ''})
                     </span>
                   </div>
 
-                  <div className="flex items-center space-x-1 text-[11px] text-slate-500 pt-1">
-                    <MapPin className="w-3 h-3 text-slate-400" />
-                    <span>{tour.locations?.length || 0} Tour Stops</span>
+                  <div className="flex items-center justify-between pt-1 text-[11px] text-slate-600">
+                    <div className="flex items-center space-x-1">
+                      <MapPin className="w-3 h-3 text-slate-400" />
+                      <span>{tour.locations?.length || 0} Waypoint Stops</span>
+                    </div>
+
+                    {/* Segment Leg Breakdown Toggle */}
+                    {tour.locations && tour.locations.length >= 2 && (
+                      <button
+                        onClick={() => toggleLegBreakdown(tour._id)}
+                        className="text-[11px] font-bold text-brand-700 hover:underline flex items-center space-x-0.5"
+                      >
+                        <span>{isLegsExpanded ? 'Hide Waypoints' : 'View Segment Distances'}</span>
+                        {isLegsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                    )}
                   </div>
+
+                  {/* Waypoint-by-Waypoint Distance Breakdown */}
+                  {isLegsExpanded && (
+                    <div className="pt-2 border-t border-slate-200 space-y-1.5 text-[11px] bg-white p-2.5 rounded-lg border border-slate-200">
+                      <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500 block">
+                        Waypoint Distances:
+                      </span>
+                      {tour.locations.map((loc, idx) => {
+                        const nextLoc = tour.locations[idx + 1];
+                        const legInfo = legs[idx];
+                        return (
+                          <div key={idx} className="flex items-center justify-between text-slate-700 border-b border-slate-100 last:border-0 pb-1 last:pb-0">
+                            <div className="min-w-0 pr-2 truncate">
+                              <span className="font-bold text-slate-900">Stop {idx + 1}: </span>
+                              <span>{loc.address.split(',')[0]}</span>
+                            </div>
+                            {nextLoc && (
+                              <div className="text-right flex-shrink-0 font-semibold text-brand-700">
+                                {legInfo ? `${legInfo.distanceText}` : 'Next →'}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                 </div>
 
-                {/* Actions */}
+                {/* Actions Bar */}
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                   
-                  {/* Status Switcher */}
+                  {/* Status Dropdown */}
                   <select
                     value={tour.status}
                     onChange={(e) => handleUpdateStatus(tour._id, e.target.value)}
@@ -229,7 +332,7 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
                   </select>
 
                   <div className="flex items-center space-x-1">
-                    {/* Load on Map Button */}
+                    {/* Load on Map */}
                     <button
                       onClick={() => onLoadTourToMap(tour.locations)}
                       className="p-1.5 text-brand-700 hover:bg-brand-50 rounded-lg transition-colors font-semibold text-xs flex items-center space-x-1"
@@ -239,7 +342,16 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
                       <span className="hidden sm:inline">Map</span>
                     </button>
 
-                    {/* Delete */}
+                    {/* Edit Tour */}
+                    <button
+                      onClick={() => handleOpenEditModal(tour)}
+                      className="p-1.5 text-slate-600 hover:text-brand-700 hover:bg-slate-100 rounded-lg transition-colors"
+                      title="Edit Tour Details & Waypoints"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+
+                    {/* Delete Tour */}
                     <button
                       onClick={() => handleDeleteTour(tour._id)}
                       className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
@@ -257,8 +369,8 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
         </div>
       )}
 
-      {/* Create Tour Modal */}
-      {showCreateModal && (
+      {/* Create / Edit Tour Modal */}
+      {showModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             
@@ -266,10 +378,10 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
               <div className="flex items-center space-x-2">
                 <Briefcase className="w-5 h-5 text-brand-600" />
                 <h3 className="text-base font-bold text-slate-900">
-                  Create New Tour / Trip
+                  {editingTourId ? 'Edit Tour / Trip' : 'Create New Tour / Trip'}
                 </h3>
               </div>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -280,7 +392,7 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
               </div>
             )}
 
-            <form onSubmit={handleCreateTour} className="space-y-4">
+            <form onSubmit={handleSaveTour} className="space-y-4">
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -291,7 +403,7 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
                     type="text"
                     value={tourTitle}
                     onChange={(e) => setTourTitle(e.target.value)}
-                    placeholder="e.g., Sales Visit - Northern Region"
+                    placeholder="e.g., Sales Visit - West Coast"
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 font-medium"
                     required
                   />
@@ -315,22 +427,41 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold uppercase text-slate-700">
-                  Description / Purpose
-                </label>
-                <textarea
-                  value={tourDesc}
-                  onChange={(e) => setTourDesc(e.target.value)}
-                  placeholder="Optional details or itinerary notes..."
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 font-medium h-16"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase text-slate-700">
+                    Tour Status
+                  </label>
+                  <select
+                    value={tourStatus}
+                    onChange={(e) => setTourStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 font-medium"
+                  >
+                    <option value="PLANNED">Planned</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase text-slate-700">
+                    Description / Notes
+                  </label>
+                  <input
+                    type="text"
+                    value={tourDesc}
+                    onChange={(e) => setTourDesc(e.target.value)}
+                    placeholder="Optional itinerary details..."
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 font-medium"
+                  />
+                </div>
               </div>
 
               {/* Tour Stops Input List */}
               <div className="space-y-2 pt-2 border-t border-slate-100">
                 <label className="text-xs font-semibold uppercase text-slate-700 block">
-                  Tour Destinations / Waypoints *
+                  Tour Destinations / Waypoints (Distance calculated automatically) *
                 </label>
                 <LocationList
                   locations={tourLocations}
@@ -369,7 +500,7 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
               <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
                 >
                   Cancel
@@ -382,12 +513,12 @@ export default function TourManagement({ currentUser, onLoadTourToMap }) {
                   {isCalculating ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving Tour to MongoDB...</span>
+                      <span>Calculating Distances & Saving...</span>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Calculate & Save Tour</span>
+                      <span>{editingTourId ? 'Save Changes' : 'Create Tour'}</span>
                     </>
                   )}
                 </button>

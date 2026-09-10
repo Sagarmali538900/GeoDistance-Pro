@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 let isMongoConnected = false;
-const memoryStore = {
+let memoryStore = {
   users: [{ _id: 'u-1', name: 'Sagar Mali', role: 'Field Agent', lastActive: new Date() }],
   history: [],
   tours: []
@@ -45,12 +45,10 @@ app.get('/api/status', (req, res) => {
 
 // --- USER ROUTES ---
 
-// Get all users with total history count
 app.get('/api/users', async (req, res) => {
   try {
     if (isMongoConnected) {
       const users = await User.find().sort({ lastActive: -1 }).lean();
-      // Attach history counts
       const usersWithCounts = await Promise.all(
         users.map(async (u) => {
           const regex = new RegExp(`^${u.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
@@ -70,7 +68,6 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// Get or Create User by Name
 app.post('/api/users', async (req, res) => {
   try {
     const { name, role } = req.body;
@@ -107,7 +104,6 @@ app.post('/api/users', async (req, res) => {
 
 // --- DISTANCE CALCULATION HISTORY ROUTES ---
 
-// Save Distance Calculation History
 app.post('/api/history', async (req, res) => {
   try {
     const { userName, locations, result, travelMode } = req.body;
@@ -120,8 +116,6 @@ app.post('/api/history', async (req, res) => {
 
     if (isMongoConnected) {
       const regex = new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-      
-      // Ensure user exists and update lastActive
       await User.findOneAndUpdate(
         { name: regex },
         { name: trimmedName, lastActive: new Date() },
@@ -152,14 +146,12 @@ app.post('/api/history', async (req, res) => {
   }
 });
 
-// Get History for specific User (Case-insensitive & Flexible matching)
 app.get('/api/users/:userName/history', async (req, res) => {
   try {
     const { userName } = req.params;
     const cleanName = decodeURIComponent(userName).trim();
 
     if (isMongoConnected) {
-      // Flexible regex match for full name or first name
       const regex = new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
       const history = await CalculationHistory.find({ userName: regex }).sort({ createdAt: -1 }).limit(50);
       res.json(history);
@@ -241,6 +233,52 @@ app.post('/api/tours', async (req, res) => {
   }
 });
 
+// Full Edit Tour Endpoint (PUT /api/tours/:id)
+app.put('/api/tours/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, assignedUser, locations, result, status, travelMode } = req.body;
+
+    if (isMongoConnected) {
+      const updated = await Tour.findByIdAndUpdate(
+        id,
+        {
+          title,
+          description,
+          assignedUser: assignedUser ? assignedUser.trim() : '',
+          locations,
+          result,
+          status,
+          travelMode
+        },
+        { new: true }
+      );
+      if (!updated) return res.status(404).json({ error: 'Tour not found' });
+      res.json(updated);
+    } else {
+      const tourIndex = memoryStore.tours.findIndex(t => String(t._id) === String(id));
+      if (tourIndex !== -1) {
+        memoryStore.tours[tourIndex] = {
+          ...memoryStore.tours[tourIndex],
+          title,
+          description,
+          assignedUser: assignedUser ? assignedUser.trim() : '',
+          locations,
+          result,
+          status,
+          travelMode
+        };
+        res.json(memoryStore.tours[tourIndex]);
+      } else {
+        res.status(404).json({ error: 'Tour not found' });
+      }
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Tour Status Endpoint (PATCH /api/tours/:id)
 app.patch('/api/tours/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -250,7 +288,7 @@ app.patch('/api/tours/:id', async (req, res) => {
       const updated = await Tour.findByIdAndUpdate(id, { status }, { new: true });
       res.json(updated);
     } else {
-      const tour = memoryStore.tours.find(t => t._id === id);
+      const tour = memoryStore.tours.find(t => String(t._id) === String(id));
       if (tour) {
         tour.status = status;
         res.json(tour);
@@ -263,15 +301,18 @@ app.patch('/api/tours/:id', async (req, res) => {
   }
 });
 
+// Delete Tour Endpoint (DELETE /api/tours/:id)
 app.delete('/api/tours/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
     if (isMongoConnected) {
       await Tour.findByIdAndDelete(id);
+      res.json({ message: 'Tour deleted successfully', id });
     } else {
-      memoryStore.tours = memoryStore.tours.filter(t => t._id !== id);
+      memoryStore.tours = memoryStore.tours.filter(t => String(t._id) !== String(id));
+      res.json({ message: 'Tour deleted successfully', id });
     }
-    res.json({ message: 'Tour deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

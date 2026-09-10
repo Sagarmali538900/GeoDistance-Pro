@@ -142,6 +142,20 @@ app.post('/api/tours', async (req, res) => {
   }
 });
 
+app.put('/api/tours/:id', async (req, res) => {
+  try {
+    const { title, description, assignedUser, locations, result, status, travelMode } = req.body;
+    const updated = await Tour.findByIdAndUpdate(
+      req.params.id,
+      { title, description, assignedUser: assignedUser ? assignedUser.trim() : '', locations, result, status, travelMode },
+      { new: true }
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch('/api/tours/:id', async (req, res) => {
   try {
     const updated = await Tour.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
@@ -154,7 +168,7 @@ app.patch('/api/tours/:id', async (req, res) => {
 app.delete('/api/tours/:id', async (req, res) => {
   try {
     await Tour.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Deleted successfully' });
+    res.json({ message: 'Deleted successfully', id: req.params.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
