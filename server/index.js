@@ -146,6 +146,21 @@ app.post('/api/history', async (req, res) => {
   }
 });
 
+// Get ALL Team History Across All Users
+app.get('/api/history/all', async (req, res) => {
+  try {
+    if (isMongoConnected) {
+      const history = await CalculationHistory.find().sort({ createdAt: -1 }).limit(100);
+      res.json(history);
+    } else {
+      res.json(memoryStore.history);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get History for specific User
 app.get('/api/users/:userName/history', async (req, res) => {
   try {
     const { userName } = req.params;
@@ -173,18 +188,18 @@ app.get('/api/tours', async (req, res) => {
   try {
     const { assignedUser, status } = req.query;
     const filter = {};
-    if (assignedUser) {
+    if (assignedUser && assignedUser !== 'ALL') {
       filter.assignedUser = new RegExp(`^${assignedUser.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
     }
-    if (status) filter.status = status;
+    if (status && status !== 'ALL') filter.status = status;
 
     if (isMongoConnected) {
       const tours = await Tour.find(filter).sort({ createdAt: -1 });
       res.json(tours);
     } else {
       let tours = [...memoryStore.tours];
-      if (assignedUser) tours = tours.filter(t => t.assignedUser.toLowerCase().includes(assignedUser.toLowerCase()));
-      if (status) tours = tours.filter(t => t.status === status);
+      if (assignedUser && assignedUser !== 'ALL') tours = tours.filter(t => t.assignedUser.toLowerCase().includes(assignedUser.toLowerCase()));
+      if (status && status !== 'ALL') tours = tours.filter(t => t.status === status);
       res.json(tours);
     }
   } catch (err) {
@@ -233,7 +248,6 @@ app.post('/api/tours', async (req, res) => {
   }
 });
 
-// Full Edit Tour Endpoint (PUT /api/tours/:id)
 app.put('/api/tours/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -278,7 +292,6 @@ app.put('/api/tours/:id', async (req, res) => {
   }
 });
 
-// Update Tour Status Endpoint (PATCH /api/tours/:id)
 app.patch('/api/tours/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -301,7 +314,6 @@ app.patch('/api/tours/:id', async (req, res) => {
   }
 });
 
-// Delete Tour Endpoint (DELETE /api/tours/:id)
 app.delete('/api/tours/:id', async (req, res) => {
   try {
     const { id } = req.params;

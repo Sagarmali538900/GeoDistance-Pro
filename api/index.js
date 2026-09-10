@@ -95,6 +95,15 @@ app.post('/api/history', async (req, res) => {
   }
 });
 
+app.get('/api/history/all', async (req, res) => {
+  try {
+    const history = await CalculationHistory.find().sort({ createdAt: -1 }).limit(100);
+    res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/users/:userName/history', async (req, res) => {
   try {
     const { userName } = req.params;
@@ -111,10 +120,10 @@ app.get('/api/tours', async (req, res) => {
   try {
     const { assignedUser, status } = req.query;
     const filter = {};
-    if (assignedUser) {
+    if (assignedUser && assignedUser !== 'ALL') {
       filter.assignedUser = new RegExp(`^${assignedUser.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
     }
-    if (status) filter.status = status;
+    if (status && status !== 'ALL') filter.status = status;
 
     const tours = await Tour.find(filter).sort({ createdAt: -1 });
     res.json(tours);

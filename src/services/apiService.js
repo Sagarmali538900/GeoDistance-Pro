@@ -78,6 +78,19 @@ export async function saveCalculationHistoryApi(historyPayload) {
 }
 
 /**
+ * Get ALL Team History Across All Users
+ */
+export async function getAllHistoryApi() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/history/all`);
+    if (res.ok) return await res.json();
+  } catch (e) {
+    console.warn("API getAllHistory failed:", e);
+  }
+  return [];
+}
+
+/**
  * Get distance calculation history for specific user
  */
 export async function getUserHistoryApi(userName) {
@@ -97,8 +110,8 @@ export async function getToursApi(assignedUser = null, status = null) {
   try {
     let url = `${API_BASE_URL}/tours`;
     const params = new URLSearchParams();
-    if (assignedUser) params.append('assignedUser', assignedUser);
-    if (status) params.append('status', status);
+    if (assignedUser && assignedUser !== 'ALL') params.append('assignedUser', assignedUser);
+    if (status && status !== 'ALL') params.append('status', status);
     if (params.toString()) url += `?${params.toString()}`;
 
     const res = await fetch(url);
@@ -110,8 +123,8 @@ export async function getToursApi(assignedUser = null, status = null) {
   // Fallback
   const savedTours = localStorage.getItem('geometrics_tours');
   let tours = savedTours ? JSON.parse(savedTours) : [];
-  if (assignedUser) tours = tours.filter(t => t.assignedUser === assignedUser);
-  if (status) tours = tours.filter(t => t.status === status);
+  if (assignedUser && assignedUser !== 'ALL') tours = tours.filter(t => t.assignedUser === assignedUser);
+  if (status && status !== 'ALL') tours = tours.filter(t => t.status === status);
   return tours;
 }
 
