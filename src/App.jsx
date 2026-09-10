@@ -15,8 +15,7 @@ import {
   RotateCcw, 
   Loader2, 
   AlertCircle, 
-  Navigation,
-  ShieldCheck
+  Navigation
 } from 'lucide-react';
 
 const INITIAL_LOCATIONS = [
@@ -26,7 +25,7 @@ const INITIAL_LOCATIONS = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('calculator'); // 'calculator' | 'members' | 'tours'
-  const [currentUser, setCurrentUser] = useState('Default User');
+  const [currentUser, setCurrentUser] = useState('Sagar Mali');
   const [dbStatus, setDbStatus] = useState({ status: 'online', mongoConnected: true });
 
   const [locations, setLocations] = useState(INITIAL_LOCATIONS);
@@ -156,7 +155,7 @@ export default function App() {
       }
 
       // Save calculation to MongoDB database under current user name!
-      saveCalculationHistoryApi({
+      await saveCalculationHistoryApi({
         userName: currentUser || 'Default User',
         locations: result.resolvedLocations || validLocations,
         result: {
@@ -280,6 +279,7 @@ export default function App() {
                   unit={unit}
                   locations={locations}
                   travelMode={travelMode}
+                  currentUser={currentUser}
                 />
               )}
 

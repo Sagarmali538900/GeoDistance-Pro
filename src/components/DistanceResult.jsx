@@ -8,10 +8,12 @@ import {
   Share2, 
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  UserCheck,
+  Database
 } from 'lucide-react';
 
-export default function DistanceResult({ result, unit, locations, travelMode }) {
+export default function DistanceResult({ result, unit, locations, travelMode, currentUser }) {
   const [copied, setCopied] = useState(false);
   const [showLegs, setShowLegs] = useState(false);
   const [shared, setShared] = useState(false);
@@ -29,6 +31,7 @@ export default function DistanceResult({ result, unit, locations, travelMode }) 
   // Copy result details to clipboard
   const handleCopy = () => {
     const summaryText = `GeoMetrics Distance Analysis:
+User / Agent: ${currentUser || 'Default User'}
 From: ${originAddress}
 To: ${destinationAddress}
 Distance: ${displayDistance}
@@ -64,7 +67,7 @@ Estimated Travel Time: ${displayDuration} (${travelMode.toLowerCase()})`;
   const handleShare = () => {
     const shareData = {
       title: 'GeoMetrics Route Analysis',
-      text: `Route from ${originAddress} to ${destinationAddress} (${displayDistance}, ${displayDuration})`,
+      text: `Route by ${currentUser || 'User'} from ${originAddress} to ${destinationAddress} (${displayDistance}, ${displayDuration})`,
       url: getGoogleMapsUrl()
     };
 
@@ -79,9 +82,9 @@ Estimated Travel Time: ${displayDuration} (${travelMode.toLowerCase()})`;
   };
 
   return (
-    <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200/90 rounded-2xl p-5 shadow-card space-y-4">
+    <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200/90 rounded-2xl p-5 shadow-card space-y-4 animate-in fade-in">
       
-      {/* Result Header Badge */}
+      {/* Result Header & Saved Badge */}
       <div className="flex items-center justify-between border-b border-slate-200/70 pb-3">
         <div className="flex items-center space-x-2">
           <div className="p-1.5 bg-brand-50 text-brand-700 rounded-lg">
@@ -91,9 +94,12 @@ Estimated Travel Time: ${displayDuration} (${travelMode.toLowerCase()})`;
             Route Analysis Result
           </span>
         </div>
-        <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase">
-          {travelMode}
-        </span>
+
+        <div className="flex items-center space-x-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full shadow-2xs">
+          <Database className="w-3 h-3 text-emerald-600" />
+          <span>Saved to MongoDB for: </span>
+          <span className="underline decoration-emerald-400">{currentUser || 'User'}</span>
+        </div>
       </div>
 
       {/* Prominent Distance & Duration Cards */}
@@ -123,7 +129,7 @@ Estimated Travel Time: ${displayDuration} (${travelMode.toLowerCase()})`;
             {displayDuration}
           </div>
           <p className="text-[11px] text-slate-500 mt-0.5">
-            Est. optimal conditions
+            Mode: {travelMode.toLowerCase()}
           </p>
         </div>
 
